@@ -34,8 +34,11 @@ func (c *Client) Invite(ctx context.Context, email string) (*Response, error) {
 		"set_active": {"true"},
 	}
 	body := strings.NewReader(data.Encode())
+
 	req, err := http.NewRequest("POST", c.inviteAPI, body)
 	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err

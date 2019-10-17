@@ -31,14 +31,18 @@ func (r *Response) String() string {
 	return string(b)
 }
 
-func (r *Client) Verify(ctx context.Context, response string) (bool, error) {
+func (r *Client) Verify(ctx context.Context, response, remoteip string) (bool, error) {
 	data := url.Values{
 		"secret":   {r.SecretKey},
 		"response": {response},
+		"remoteip": {remoteip},
 	}
 	body := strings.NewReader(data.Encode())
+
 	req, err := http.NewRequest("POST", verifyAPI, body)
 	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false, err

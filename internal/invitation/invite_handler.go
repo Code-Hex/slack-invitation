@@ -1,12 +1,17 @@
 package invitation
 
 import (
-	"log"
+	"fmt"
 	"net/http"
+	"regexp"
 
+	"github.com/Code-Hex/slack-invitaion/internal/ip"
 	"github.com/Code-Hex/slack-invitaion/internal/recaptcha"
 	"github.com/Code-Hex/slack-invitaion/internal/slack"
 )
+
+// This regex is got from slack sign-in page
+var emailValidation = regexp.MustCompile("[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?")
 
 func slackInviteHandler(workspace, token, reCaptureSecret string) http.HandlerFunc {
 	slackAPIClient := slack.NewInviteClient(workspace, token)
@@ -18,30 +23,77 @@ func slackInviteHandler(workspace, token, reCaptureSecret string) http.HandlerFu
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		email := r.PostFormValue("email")
+		if !emailValidation.MatchString(email) {
+			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+				Op:  "validation",
+				Msg: "email validation is failed",
+			})
+			return
+		}
+
+		addr, err := ip.Normalize(r.RemoteAddr)
+		if err != nil {
+			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+				Op:  "validation",
+				Msg: "invalid remote address: " + err.Error(),
+			})
+			return
+		}
+
 		ctx := r.Context()
 
-		response := r.FormValue("g-recaptcha-response")
-		ok, err := reCaptchaClient.Verify(ctx, response)
+		response := r.PostFormValue("g-recaptcha-response")
+		ok, err := reCaptchaClient.Verify(ctx, response, addr)
 		if err != nil {
-			writeJSONResponse(w, http.StatusBadRequest, err.Error())
+			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+				Op:  "reCAPTCHA",
+				Msg: "request has been failed: " + err.Error(),
+			})
 			return
 		}
 		if !ok {
-			writeJSONResponse(w, http.StatusBadRequest, "reCapture challenge is failed")
+			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+				Op:  "reCAPTCHA",
+				Msg: "challenge is failed",
+			})
 			return
 		}
 
-		email := r.FormValue("email")
 		resp, err := slackAPIClient.Invite(ctx, email)
 		if err != nil {
-			writeJSONResponse(w, http.StatusBadRequest, err.Error())
+			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+				Op:  "slack",
+				Msg: "request has been failed",
+			})
 			return
 		}
 		if !resp.OK {
-			log.Printf("failed to send invite mail: %#v\n", resp)
-
+			// already invited
+			if resp.Provided == "already_in_team" {
+				http.Redirect(w, r, "https://"+workspace+".slack.com", http.StatusSeeOther)
+				return
+			}
+			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+				Op:  "slack",
+				Msg: slackErrorHandle(resp),
+			})
 			return
 		}
-
 	}
+}
+
+const (
+	msgErrMissingAdminToken = "Missing admin scope: The token you provided is for an account that is not an admin. You must provide a token from an admin account in order to invite users through the Slack API."
+	msgErrAlreadyInvited    = "You have already been invited to Slack. Check for an email from feedback@slack.com."
+)
+
+func slackErrorHandle(resp *slack.Response) string {
+	if resp.Provided == "missing_scope" && resp.Needed == "admin" {
+		return msgErrMissingAdminToken
+	}
+	if resp.Provided == "already_invited" {
+		return msgErrAlreadyInvited
+	}
+	return fmt.Sprintf("provided: %s, message: %s", resp.Provided, resp.Error)
 }
