@@ -1,10 +1,9 @@
 package index
 
 import (
-	"fmt"
 	"net/http"
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "hello, world\n")
+	http.Redirect(w, r, "https://codehex.dev/slack_invitation.html", http.StatusSeeOther)
 }
