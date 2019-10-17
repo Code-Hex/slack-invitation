@@ -1,0 +1,17 @@
+{
+    "name": "slack-invitation",
+    "version": 2,
+    "builds": [
+        { "src": "/index/*.go", "use": "@now/go" },
+        { "src": "/invite/*.go", "use": "@now/go" }
+    ],
+    "routes": [
+        { "src": "/", "dest": "/index/index.go" },
+        { "src": "/invite", "dest": "/invite/invite.go" }
+    ],
+    "env": {
+        "SLACK_API_TOKEN": "@slack-api-token",
+        "SLACK_SUBDOMAIN" :"@slack-subdomain",
+        "GOOGLE_CAPTCHA_SECRET" : "@google-captcha-secret"
+    }
+}
