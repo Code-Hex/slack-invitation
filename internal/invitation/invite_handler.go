@@ -25,7 +25,7 @@ func slackInviteHandler(workspace, token, reCaptureSecret string) http.HandlerFu
 		}
 		email := r.PostFormValue("email")
 		if !emailValidation.MatchString(email) {
-			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+			writeJSONResponse(w, http.StatusBadRequest, &Response{
 				Op:  "validation",
 				Msg: "email validation is failed",
 			})
@@ -34,7 +34,7 @@ func slackInviteHandler(workspace, token, reCaptureSecret string) http.HandlerFu
 
 		addr, err := ip.Normalize(r.RemoteAddr)
 		if err != nil {
-			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+			writeJSONResponse(w, http.StatusBadRequest, &Response{
 				Op:  "validation",
 				Msg: "invalid remote address: " + err.Error(),
 			})
@@ -46,23 +46,23 @@ func slackInviteHandler(workspace, token, reCaptureSecret string) http.HandlerFu
 		response := r.PostFormValue("g-recaptcha-response")
 		ok, err := reCaptchaClient.Verify(ctx, response, addr)
 		if err != nil {
-			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+			writeJSONResponse(w, http.StatusBadRequest, &Response{
 				Op:  "reCAPTCHA",
 				Msg: "request has been failed: " + err.Error(),
 			})
 			return
 		}
 		if !ok {
-			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+			writeJSONResponse(w, http.StatusBadRequest, &Response{
 				Op:  "reCAPTCHA",
-				Msg: "challenge is failed",
+				Msg: "challenge is failed (one more try please!!)",
 			})
 			return
 		}
 
 		resp, err := slackAPIClient.Invite(ctx, email)
 		if err != nil {
-			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+			writeJSONResponse(w, http.StatusBadRequest, &Response{
 				Op:  "slack",
 				Msg: "request has been failed",
 			})
@@ -74,12 +74,16 @@ func slackInviteHandler(workspace, token, reCaptureSecret string) http.HandlerFu
 				http.Redirect(w, r, "https://"+workspace+".slack.com", http.StatusSeeOther)
 				return
 			}
-			writeJSONResponse(w, http.StatusBadRequest, &OpError{
+			writeJSONResponse(w, http.StatusBadRequest, &Response{
 				Op:  "slack",
 				Msg: slackErrorHandle(resp),
 			})
 			return
 		}
+		writeJSONResponse(w, http.StatusOK, &Response{
+			Op:  "slack",
+			Msg: "invite successful :D",
+		})
 	}
 }
 
